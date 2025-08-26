@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Year in Review — Interactive</title>
+
+  <!-- Chart.js and html2canvas (CDNs) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <style>
+    :root{
+      --bg-light:#f6f7fb; --text-light:#0b1220; --card-light:#fff; --muted:#6b7280;
+      --accent1:#4f46e5; --accent2:#06b6d4;
+    }
+    @media(prefers-color-scheme:dark){
+      :root{
+        --bg-light:#0b1020; --text-light:#e6eef8; --card-light:#0f1724; --muted:#9aa4b2;
+      }
+    }
+
+    *{box-sizing:border-box}
+    body {
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02)), var(--bg-light);
+      color:var(--text-light);
+      -webkit-font-smoothing:antialiased; transition: background .28s, color .28s;
+    }
+    body.dark { /* toggled by JS */ }
+
+    header {
+      padding:22px;
+      display:flex; align-items:center; justify-content:space-between;
+      background: linear-gradient(90deg,var(--accent1),var(--accent2));
+      color:#fff;
+    }
+    .brand { display:flex; gap:12px; align-items:center; }
+    .logo { width:44px; height:44px; border-radius:10px; background:rgba(255,255,255,0.12);
+            display:flex; align-items:center; justify-content:center; font-weight:700; }
+    header h1 { margin:0; font-size:1.05rem; }
+    header p { margin:0; font-size: .85rem; opacity:0.95; }
+
+    main { max-width:1100px; margin:20px auto; padding:18px; }
+    .grid { display:grid; grid-template-columns: 1fr 420px; gap:18px; align-items:start; }
+    @media(max-width:980px){ .grid{ grid-template-columns:1fr; } }
+
+    .card {
+      background:var(--card-light); border-radius:12px; padding:14px;
+      box-shadow: 0 10px 30px rgba(2,6,23,0.06); transition: transform .18s ease, box-shadow .18s ease, background .25s;
+    }
+    body.dark .card { box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+
+    label { display:block; font-size:.86rem; color:var(--muted); margin-bottom:8px; }
+    input[type="text"], input[type="number"], textarea {
+      width:100%; padding:10px 12px; border-radius:8px; border:1px solid rgba(0,0,0,0.06);
+      background:transparent; color:var(--text-light); font-size:0.95rem;
+    }
+    textarea { min-height:84px; resize:vertical; }
+
+    .btn {
+      display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:10px;
+      border:none; background:linear-gradient(90deg,var(--accent1),var(--accent2)); color:white; cursor:pointer;
+      font-weight:700;
+    }
+    .btn.ghost { background:transparent; border:1px solid rgba(0,0,0,0.06); color:var(--text-light); font-weight:600; }
+
+    .muted { color:var(--muted); font-size:.9rem; }
+
+    .tilt { transition: transform .18s ease, box-shadow .18s ease; transform-origin:center; }
+    .tilt:hover { transform: translateY(-6px) rotateX(2deg) rotateY(-2deg); box-shadow: 0 14px 40px rgba(2,6,23,0.12); }
+
+    /* live preview small chart area */
+    #liveChart { width:140px; height:90px; }
+
+    /* confetti canvas */
+    #confetti { position:fixed; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:9999; }
+
+    /* share area */
+    .share-row { display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+    .share-row .small { font-size:.85rem; color:var(--muted); margin-left:6px; }
+
+    /* share-card captured area - small footer inside image */
+    #captureCard {
+      width:920px; max-width:100%; padding:20px; border-radius:12px; background: linear-gradient(135deg,#fff,#f7f7fb);
+      color:#111; box-shadow:0 12px 40px rgba(2,6,23,0.08);
+    }
+    body.dark #captureCard { background: linear-gradient(135deg,#0b0f14,#0f1418); color:#e8eef8; box-shadow:0 12px 40px rgba(0,0,0,0.5); }
+
+    #tinyCredit { font-size:11px; opacity:0.7; margin-top:10px; text-align:right; }
+
+    footer { text-align:center; margin-top:22px; color:var(--muted); font-size:.9rem; }
+    a.muted-link { color:inherit; text-decoration:none; opacity:0.9; font-size:.9rem; }
+  </style>
+</head>
+<body>
+  <!-- confetti canvas -->
+  <canvas id="confetti"></canvas>
+
+  <header>
+    <div class="brand">
+      <div class="logo">Ao</div>
+      <div>
+        <h1>Year in Review — Interactive</h1>
+        <p>Live preview · shareable image · theme-aware</p>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center">
+      <div id="status" style="color:rgba(255,255,255,0.95);font-weight:700">Ready</div>
+      <button id="themeToggle" class="btn ghost" title="Toggle theme">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="grid">
+      <!-- left: input -->
+      <div>
+        <div class="card tilt">
+          <form id="form">
+            <label>Top Movies (comma separated)</label>
+            <input id="inputMovies" type="text" placeholder="Dune, Top Gun: Maverick, ...">
+
+            <label style="margin-top:12px">Top Songs (comma separated)</label>
+            <input id="inputSongs" type="text" placeholder="Song A, Song B">
+
+            <label style="margin-top:12px">Books Read</label>
+            <input id="inputBooks" type="number" min="0" placeholder="e.g. 12">
+
+            <label style="margin-top:12px">Personal Highlight</label>
+            <input id="inputHighlight" type="text" placeholder="e.g. New job, traveled to Japan">
+
+            <div style="margin-top:14px; display:flex; gap:8px; align-items:center;">
+              <button id="generate" type="button" class="btn">🎉 Generate</button>
+              <button id="save" type="button" class="btn ghost">💾 Save</button>
+              <button id="clear" type="button" class="btn ghost">🗑 Clear</button>
+            </div>
+            <div class="muted" style="margin-top:10px">Tip: Live preview updates as you type. ⌘/Ctrl+G to generate</div>
+          </form>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card tilt">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="muted">Motivational message</div>
+              <div id="motivation" style="font-weight:800; margin-top:6px">Let's make 2026 even better 🚀</div>
+            </div>
+            <div style="text-align:right">
+              <div class="muted">Saved?</div>
+              <div id="savedFlag" style="font-weight:800;margin-top:6px">No</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- right: live preview -->
+      <aside>
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div class="muted">Movies (preview)</div>
+              <div id="liveMovies" style="font-weight:800; margin-top:6px">—</div>
+            </div>
+            <div style="width:150px;">
+              <canvas id="liveChart" width="150" height="100"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card tilt" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="muted">Books Read</div>
+            <div id="liveBooks" style="font-weight:800; font-size:1.5rem; margin-top:6px">0</div>
+          </div>
+          <div>
+            <button id="plusBook" class="btn ghost">+1</button>
+          </div>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card tilt">
+          <div class="muted">Top Songs</div>
+          <div id="liveSongs" style="font-weight:800; margin-top:6px">—</div>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card tilt" style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div class="muted">Highlight</div>
+            <div id="liveHighlight" style="font-weight:800;margin-top:6px">—</div>
+          </div>
+          <div>
+            <div class="muted">Share</div>
+            <div style="margin-top:6px">
+              <button id="downloadBtn" class="btn ghost">⬇ Download</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="shareControls" class="card" style="display:none; margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+            <div>
+              <strong>Share your card</strong>
+              <div class="muted" style="margin-top:6px">Download image or share directly</div>
+            </div>
+
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button id="downloadImage" class="btn">⬇ Download Image</button>
+              <button id="shareWeb" class="btn">🔗 Share (device)</button>
+              <button id="shareWhatsApp" class="btn ghost">WA</button>
+              <button id="shareTwitter" class="btn ghost">X</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- hidden capture card (also visible small preview) -->
+        <div id="captureWrapper" style="display:none; margin-top:12px;">
+          <div id="captureCard">
+            <h3 style="margin:0 0 8px 0;">My 2025 — Year in Review</h3>
+            <div id="captureContent" style="font-size:15px; line-height:1.4;">
+              <div id="cMovies">Movies: —</div>
+              <div id="cSongs">Songs: —</div>
+              <div id="cBooks">Books: 0</div>
+              <div id="cHighlight">Highlight: —</div>
+            </div>
+            <div id="tinyCredit">Made with ❤️ by Hussain</div>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+
+    <footer>Made with ❤️ by Hussain • Prototype</footer>
+  </main>
+
+  <script>
+  /* ======= Helpers & state ======= */
+  const $ = id => document.getElementById(id);
+  const SAVE_KEY = 'ao_yearreview_v1';
+  const THEME_KEY = 'ao_theme';
+  const confettiCanvas = $('confetti');
+  confettiCanvas.width = innerWidth; confettiCanvas.height = innerHeight;
+  const confettiCtx = confettiCanvas.getContext('2d');
+  let confettiParts = [];
+
+  let state = { movies:[], songs:[], books:0, highlight:'', saved:false };
+  const MOT = [
+    "🔥 You crushed it in 2025!",
+    "✨ What a year — let's top it in 2026!",
+    "💪 Progress unlocked — keep going!",
+    "🎯 Goals met, memories made!",
+    "🚀 Big energy for next year!"
+  ];
+
+  /* ======= Theme: system preference + toggle saved ======= */
+  const themeBtn = $('themeToggle');
+  function detectSystem() { return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light'; }
+  function applyTheme(t){
+    document.body.classList.toggle('dark', t==='dark');
+    themeBtn.textContent = t==='dark' ? '☀️' : '🌙';
+    refreshLiveChart();
+  }
+  let savedTheme = localStorage.getItem(THEME_KEY) || detectSystem();
+  applyTheme(savedTheme);
+  themeBtn.addEventListener('click', ()=>{
+    const next = document.body.classList.contains('dark') ? 'light' : 'dark';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  });
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e=>{
+    if(!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? 'dark' : 'light');
+  });
+
+  /* ======= Inputs & live preview ======= */
+  const inMovies = $('inputMovies'), inSongs = $('inputSongs'), inBooks = $('inputBooks'), inHighlight = $('inputHighlight');
+  const liveMovies = $('liveMovies'), liveSongs = $('liveSongs'), liveBooks = $('liveBooks'), liveHighlight = $('liveHighlight');
+  const cMovies = $('cMovies'), cSongs = $('cSongs'), cBooks = $('cBooks'), cHighlight = $('cHighlight');
+  const shareControls = $('shareControls');
+
+  function parseCSV(s){ return s ? s.split(',').map(x=>x.trim()).filter(Boolean) : []; }
+
+  function updateStateFromInputs(){
+    state.movies = parseCSV(inMovies.value);
+    state.songs = parseCSV(inSongs.value);
+    state.books = Number(inBooks.value) || 0;
+    state.highlight = inHighlight.value || '';
+    state.saved = false;
+    $('savedFlag').innerText = 'No';
+  }
+
+  function animateCount(el, target){
+    const start = Number(el.textContent) || 0;
+    const dur = 600; const t0 = performance.now();
+    function step(now){
+      const p = Math.min(1, (now-t0)/dur);
+      const val = Math.floor(start + (target - start) * (1 - Math.pow(1-p,3)));
+      el.textContent = val;
+      if(p<1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function updateLivePreview(){
+    liveMovies.textContent = state.movies.length ? state.movies.join(' · ') : '—';
+    liveSongs.textContent = state.songs.length ? state.songs.join(' · ') : '—';
+    animateCount(liveBooks, state.books);
+    liveHighlight.textContent = state.highlight || '—';
+
+    // small capture card
+    cMovies.textContent = 'Movies: ' + (state.movies.length ? state.movies.join(', ') : '—');
+    cSongs.textContent = 'Songs: ' + (state.songs.length ? state.songs.join(', ') : '—');
+    cBooks.textContent = 'Books: ' + state.books;
+    cHighlight.textContent = 'Highlight: ' + (state.highlight || '—');
+
+    // show share controls only if user generated or has content
+    if(state.movies.length || state.songs.length || state.books || state.highlight) shareControls.style.display = 'block';
+    else shareControls.style.display = 'none';
+
+    refreshLiveChart();
+  }
+
+  /* debounce */
+  function debounce(fn, wait=180){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); } }
+
+  [inMovies,inSongs,inBooks,inHighlight].forEach(i=> i.addEventListener('input', debounce(()=>{ updateStateFromInputs(); updateLivePreview(); scheduleAutosave(); }, 160)));
+
+  $('plusBook').addEventListener('click', ()=>{
+    inBooks.value = (Number(inBooks.value) || 0) + 1; updateStateFromInputs(); updateLivePreview();
+  });
+
+  /* ======= Chart (small live chart) ======= */
+  let liveChart = null;
+  function getThemeColors(){
+    const isDark = document.body.classList.contains('dark');
+    return { text: isDark ? '#e6eef8' : '#111827', grid: isDark ? '#24303a' : '#e6e6e6', bar: isDark ? 'rgba(96,165,250,0.95)' : 'rgba(59,130,246,0.95)' };
+  }
+  function refreshLiveChart(){
+    const ctx = $('liveChart').getContext('2d');
+    const colors = getThemeColors();
+    if(liveChart) liveChart.destroy();
+    const labels = state.movies.length ? state.movies.slice(0,5) : ['—'];
+    const data = state.movies.length ? state.movies.map(()=> Math.floor(Math.random()*8)+1) : [0];
+    liveChart = new Chart(ctx, {
+      type:'bar',
+      data:{ labels, datasets:[{ data, backgroundColor: colors.bar }] },
+      options:{
+        plugins:{ legend:{ display:false } }, maintainAspectRatio:false,
+        scales:{ x:{ ticks:{ color:colors.text }, grid:{ color:colors.grid }}, y:{ ticks:{ color:colors.text }, grid:{ color:colors.grid }} }
+      }
+    });
+  }
+
+  /* ======= Confetti (simple) ======= */
+  function spawnConfetti(x=innerWidth/2, y=innerHeight/3, count=80){
+    const colors = ['#ff5f6d','#ffc371','#7bffb2','#7bd3ff','#c79bff'];
+    for(let i=0;i<count;i++){
+      confettiParts.push({
+        x,y,
+        vx:(Math.random()-0.5)*10,
+        vy:(Math.random()*-6)-2,
+        size:Math.random()*9+4,
+        color: colors[Math.floor(Math.random()*colors.length)],
+        rot: Math.random()*360,
+        vr: (Math.random()-0.5)*8,
+        life: Math.random()*80+60
+      });
+    }
+  }
+  function confettiLoop(){
+    confettiCtx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+    for(let i=confettiParts.length-1;i>=0;i--){
+      const p = confettiParts[i];
+      p.vy += 0.28; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life--;
+      confettiCtx.save(); confettiCtx.translate(p.x,p.y); confettiCtx.rotate(p.rot*Math.PI/180);
+      confettiCtx.fillStyle = p.color; confettiCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size*0.6);
+      confettiCtx.restore();
+      if(p.y > confettiCanvas.height + 60 || p.life <=0) confettiParts.splice(i,1);
+    }
+    requestAnimationFrame(confettiLoop);
+  }
+  window.addEventListener('resize', ()=>{ confettiCanvas.width = innerWidth; confettiCanvas.height = innerHeight; });
+
+  /* ======= Save / Load / Clear ======= */
+  function saveState(){
+    const s = { movies: state.movies, songs: state.songs, books: state.books, highlight: state.highlight };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+    state.saved = true;
+    $('savedFlag').innerText = 'Yes';
+    $('status').innerText = 'Saved';
+    setTimeout(()=>$('status').innerText='Ready',1200);
+  }
+  function loadState(){
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return;
+    try{
+      const s = JSON.parse(raw);
+      state.movies = s.movies || []; state.songs = s.songs || []; state.books = s.books || 0; state.highlight = s.highlight || '';
+      inMovies.value = state.movies.join(', '); inSongs.value = state.songs.join(', '); inBooks.value = state.books; inHighlight.value = state.highlight;
+      updateLivePreview(); state.saved = true; $('savedFlag').innerText='Yes';
+    }catch(e){ console.warn(e); }
+  }
+  function clearAll(){
+    if(!confirm('Clear saved data and inputs?')) return;
+    localStorage.removeItem(SAVE_KEY);
+    inMovies.value=''; inSongs.value=''; inBooks.value=''; inHighlight.value='';
+    updateStateFromInputs(); updateLivePreview(); $('savedFlag').innerText='No';
+  }
+
+  /* autosave scheduling */
+  let autosaveTimer = null;
+  function scheduleAutosave(){ if(autosaveTimer) clearTimeout(autosaveTimer); autosaveTimer = setTimeout(saveState, 11000); }
+
+  /* ======= Generate (button) ======= */
+  $('generate').addEventListener('click', ()=> {
+    updateStateFromInputs(); updateLivePreview();
+    // motivation
+    $('motivation').innerText = MOT[Math.floor(Math.random()*MOT.length)];
+    // confetti
+    spawnConfetti(innerWidth*0.5, innerHeight*0.25, 120);
+    // make capture area visible & scroll to it
+    $('captureWrapper').style.display = 'block';
+    $('shareControls').style.display = 'block';
+    $('status').innerText = 'Generated';
+    saveState();
+  });
+
+  $('save').addEventListener('click', saveState);
+  $('clear').addEventListener('click', clearAll);
+
+  /* keyboard shortcut: Cmd/Ctrl+G to generate */
+  window.addEventListener('keydown', (e)=>{ if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='g'){ e.preventDefault(); $('generate').click(); } });
+
+  /* ======= Download & Share logic ======= */
+  function elementToBlob(el){
+    // returns Promise<Blob>
+    return html2canvas(el, { scale: 2, backgroundColor: null }).then(canvas => {
+      return new Promise(res => canvas.toBlob(blob => res(blob), 'image/png', 0.95));
+    });
+  }
+
+  async function downloadCapture(){
+    const node = $('captureCard');
+    node.style.display = 'block'; // ensure visible
+    // sync content already updated
+    const blob = await elementToBlob(node);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'year-in-review-2025.png'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function shareCaptureWeb(){
+    const node = $('captureCard');
+    const blob = await elementToBlob(node);
+    const filesArray = [ new File([blob], 'year-in-review-2025.png', { type: blob.type }) ];
+    // Use Web Share API if available and supports files
+    if(navigator.canShare && navigator.canShare({ files: filesArray })) {
+      try {
+        await navigator.share({
+          files: filesArray,
+          title: 'My Year in Review 2025',
+          text: `My 2025 Year in Review — made with August One`
+        });
+        return;
+      } catch(err){
+        console.warn('Share cancelled or failed', err);
+      }
+    }
+    // fallback: open image in new tab and copy text to clipboard
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    try { await navigator.clipboard.writeText(`My 2025 Year in Review — check my image (saved). #My2025Review`); alert('Shared text copied to clipboard. Image opened in new tab for manual sharing.'); }
+    catch(e){ alert('Image opened in new tab. Copy the image to share on social platforms.'); }
+    setTimeout(()=>URL.revokeObjectURL(url), 30000);
+  }
+
+  /* Quick share to WhatsApp / Twitter (text fallback + open image in new tab) */
+  async function shareToWhatsApp(){
+    const node = $('captureCard'); const blob = await elementToBlob(node);
+    const url = URL.createObjectURL(blob);
+    // WhatsApp web accepts text only; we open image in new tab and prefill text
+    const text = encodeURIComponent(`My 2025 Year in Review! Check my image:`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+    window.open(url, '_blank');
+    setTimeout(()=>URL.revokeObjectURL(url), 30000);
+  }
+  async function shareToTwitter(){
+    const node = $('captureCard'); const blob = await elementToBlob(node);
+    const url = URL.createObjectURL(blob);
+    const text = encodeURIComponent(`My 2025 Year in Review!`);
+    // Twitter can't accept images via URL param; open tweet composer with text, open image in new tab
+    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+    window.open(url, '_blank');
+    setTimeout(()=>URL.revokeObjectURL(url), 30000);
+  }
+
+  // wire download/share buttons
+  $('downloadBtn').addEventListener('click', ()=> { $('captureWrapper').style.display='block'; downloadCapture(); });
+  $('downloadImage').addEventListener('click', downloadCapture);
+  $('shareWeb').addEventListener('click', shareCaptureWeb);
+  $('shareWhatsApp').addEventListener('click', shareToWhatsApp);
+  $('shareTwitter').addEventListener('click', shareToTwitter);
+
+  /* when user clicks the small download icon in preview area */
+  $('downloadBtn').addEventListener('click', ()=> {
+    $('captureWrapper').style.display='block';
+    downloadCapture();
+  });
+
+  /* ======= Init ======= */
+  function init(){
+    confettiCanvas.width = innerWidth; confettiCanvas.height = innerHeight;
+    confettiLoop();
+    loadState();
+    updateStateFromInputs();
+    updateLivePreview();
+    // show saved status
+    if(state.saved) $('savedFlag').innerText='Yes';
+  }
+  init();
+
+  </script>
+</body>
+</html>
